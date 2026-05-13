@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
+    <title>動態排班表｜七休一警示｜點擊切換休假｜JSONBin雲端存檔</title>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: var(--body-bg);
+            color: var(--text-primary);
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .app-scaler {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transform-origin: center center;
+            transition: transform 0.1s ease;
+        }
+        .app-container {
+            width: max-content;
+            min-width: 95%;
+            max-width: 98vw;
+            margin: 0 auto;
+        }
+        .theme-card {
+            background: var(--card-bg);
+            border-radius: 28px;
+            box-shadow: 0 12px 28px var(--shadow-color);
+            overflow: hidden;
+            width: 100%;
+        }
+        .toolbar-wrapper {
+            transition: all 0.25s ease;
+            overflow: hidden;
+        }
+        .toolbar-wrapper.collapsed {
+            max-height: 0;
+            padding: 0;
+            border-bottom: none;
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 18px;
+            background: var(--toolbar-bg);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .title-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            cursor: pointer;
+            user-select: none;
+            padding: 8px 16px 4px 16px;
+            background: var(--card-bg);
+            transition: background 0.2s;
+        }
+        .title-header:hover {
+            background: var(--toolbar-bg);
+        }
+        .month-title {
+            text-align: center;
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            color: var(--header-text);
+            margin: 0;
+            display: inline-block;
+        }
+        .toggle-icon {
+            margin-left: 12px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            display: inline-block;
+            transition: transform 0.2s;
+            color: var(--accent-color);
+        }
+        .toggle-icon.collapsed {
+            transform: rotate(180deg);
+        }
+        .left-group, .right-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        button, .theme-btn {
+            background: var(--btn-bg);
+            border: 1px solid var(--btn-border);
+            padding: 5px 12px;
+            font-weight: 600;
+            border-radius: 40px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            color: var(--btn-text);
+            transition: 0.2s;
+        }
+        button.primary { background: var(--primary-bg); border-color: var(--primary-border); color: white; }
+        button:hover { filter: brightness(0.94); transform: translateY(-1px); }
+        .date-range { background: var(--range-bg); padding: 4px 14px; border-radius: 30px; font-weight: 700; font-size: 0.8rem; }
+        .zoom-control, .font-control, .size-control { display: flex; gap: 6px; background: var(--toolbar-bg); padding: 2px 10px; border-radius: 40px; align-items: center; }
+        .table-frozen-container {
+            position: relative;
+            overflow: auto;
+            border-radius: 18px;
+            margin: 14px 18px 12px 18px;
+            border: 1px solid var(--border-color);
+            background: var(--table-bg);
+            max-height: 68vh;
+        }
+        .schedule-table {
+            border-collapse: collapse;
+            width: 100%;
+            min-width: 780px;
+            background: var(--table-bg);
+            font-size: var(--table-font-size, 0.8rem);
+            transition: font-size 0.05s ease;
+            table-layout: fixed;
+        }
+        /* 所有儲存格內容水平垂直置中 */
+        .schedule-table th, .schedule-table td {
+            border: 1px solid var(--border-color);
+            padding: var(--cell-padding, 6px 5px);
+            text-align: center;
+            vertical-align: middle;
+            color: var(--text-primary);
+            background-color: var(--table-bg);
+            width: var(--cell-width, 75px);
+            height: var(--cell-height, auto);
+            word-break: break-word;
+        }
+        /* 凍結姓名欄 & 日期列表頭 */
+        .schedule-table th:first-child,
+        .schedule-table td:first-child {
+            position: sticky;
+            left: 0;
+            z-index: 15;
+            background-color: var(--header-bg);
+            font-weight: bold;
+        }
+        .schedule-table td:first-child {
+            background-color: var(--staff-col-bg);
+        }
+        .schedule-table th {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            background: var(--header-bg);
+        }
+        .schedule-table th:first-child {
+            z-index: 25;
+            left: 0;
+            top: 0;
+        }
+        .clickable-cell {
+            cursor: pointer;
+            transition: background 0.1s;
+            user-select: none;
+        }
+        .clickable-cell:active {
+            filter: brightness(0.95);
+        }
+        .staff-vertical {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            width: 100%;
+        }
+        .staff-name {
+            font-weight: 800;
+            font-size: calc(var(--table-font-size, 0.85rem) + 0.05rem);
+            white-space: nowrap;
+            display: inline-block;
+            padding: 0 4px;
+            border-radius: 20px;
+        }
+        .violation-blink {
+            animation: blinkRedAlert 1s infinite;
+            font-weight: 900;
+            background-color: rgba(220, 60, 50, 0.8);
+            color: #fff;
+            box-shadow: 0 0 4px red;
+        }
+        @keyframes blinkRedAlert {
+            0% { background-color: rgba(200, 40, 30, 0.9); text-shadow: 0 0 1px white; }
+            50% { background-color: rgba(255, 80, 70, 1); text-shadow: 0 0 3px #ffddbb; }
+            100% { background-color: rgba(200, 40, 30, 0.9); text-shadow: 0 0 1px white; }
+        }
+        .special-mark {
+            font-size: 0.7rem;
+            font-weight: bold;
+            background: rgba(0,0,0,0.35);
+            padding: 2px 5px;
+            border-radius: 20px;
+            margin-left: 5px;
+            display: inline-block;
+        }
+        .holiday-count-badge {
+            background: var(--holiday-count-bg);
+            border-radius: 30px;
+            padding: 2px 8px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            color: white;
+            display: inline-block;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+        .daily-holiday-cell {
+            background-color: var(--daily-holiday-bg) !important;
+            font-weight: bold;
+            color: var(--daily-holiday-text);
+        }
+        .weekend-cell {
+            background-color: var(--weekend-bg) !important;
+            color: var(--weekend-text);
+            font-weight: 700;
+        }
+        .national-cell {
+            background-color: var(--national-bg) !important;
+            color: var(--national-text);
+            font-weight: 800;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+        .holiday-tooltip {
+            position: relative;
+            cursor: help;
+        }
+        .holiday-tooltip:hover::after {
+            content: attr(data-holiday-name);
+            position: absolute;
+            bottom: 130%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e2a3a;
+            color: #f9e7c2;
+            padding: 4px 10px;
+            border-radius: 24px;
+            font-size: 0.7rem;
+            font-weight: normal;
+            white-space: nowrap;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            pointer-events: none;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,215,150,0.5);
+        }
+        .holiday-mark {
+            background-color: var(--holiday-bg) !important;
+        }
+        .live-time {
+            background: var(--primary-bg);
+            padding: 4px 12px;
+            border-radius: 32px;
+            font-weight: 600;
+            font-size: 0.75rem;
+            letter-spacing: 1px;
+            color: white;
+            white-space: nowrap;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+        }
+        .cloud-status {
+            font-size: 0.7rem;
+            margin-left: 6px;
+            background: var(--range-bg);
+            padding: 2px 8px;
+            border-radius: 20px;
+        }
+        .holiday-text-style {
+            font-weight: 800;
+            background-color: var(--holiday-bg);
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 24px;
+        }
+        /* 主題變數 */
+        :root {
+            --body-bg: #0a0e18; --card-bg: #141c2c; --toolbar-bg: #1e253a; --border-color: #2a334c;
+            --btn-bg: #28304a; --btn-border: #3f4a66; --btn-text: #eef2fc; --primary-bg: #3f6b9e;
+            --range-bg: #101624; --text-primary: #f0f4fd; --header-bg: #1b2338; --header-text: white;
+            --staff-col-bg: #111827; --holiday-bg: #4a2e3c; --badge-bg: #1f2a3c; --accent-color: #e68a72;
+            --weekend-bg: #9b3e3e; --weekend-text: #ffefcf; --national-bg: #2d5f7a; --national-text: #ffecb3;
+            --shadow-color: rgba(0,0,0,0.6); --table-bg: #0f1624; --holiday-count-bg: #3a6075;
+            --daily-holiday-bg: #2c4b5c; --daily-holiday-text: #f0f4fa; --table-font-size: 0.8rem;
+            --cell-width: 80px; --cell-height: auto; --cell-padding: 6px 5px;
+        }
+        body.theme-amber {
+            --body-bg: #fff5e8; --card-bg: #ffffff; --toolbar-bg: #fef2e0; --border-color: #e2cfb3;
+            --btn-bg: #fffaf0; --btn-border: #e2c7a0; --btn-text: #7a5a3a; --primary-bg: #e67e22;
+            --range-bg: #fae6ce; --text-primary: #3e2c1c; --header-bg: #d9a56c; --header-text: #2c1a0a;
+            --staff-col-bg: #fff2e4; --holiday-bg: #ffe0d0; --weekend-bg: #f5bc9e; --weekend-text: #9e4a2a;
+            --national-bg: #fae1b5; --national-text: #a3521a; --table-bg: #fff9f0; --holiday-count-bg: #e2c7a5;
+            --daily-holiday-bg: #ecd9bc; --daily-holiday-text: #6e4a2a;
+        }
+        body.theme-green {
+            --body-bg: #eaf5ea; --card-bg: #ffffff; --toolbar-bg: #def0d6; --border-color: #bad2a5;
+            --btn-bg: #f2fceb; --btn-border: #b3d19b; --btn-text: #2d5720; --primary-bg: #3b8b3e;
+            --range-bg: #ddecd0; --text-primary: #214f1f; --header-bg: #468b4a; --header-text: white;
+            --staff-col-bg: #eef8e8; --holiday-bg: #faf0d7; --weekend-bg: #c9e0b5; --weekend-text: #3b6e2a;
+            --national-bg: #d1e8c0; --national-text: #2a6530; --table-bg: #f9fff7; --holiday-count-bg: #cde2bc;
+            --daily-holiday-bg: #d4e4c2; --daily-holiday-text: #2f5827;
+        }
+        body.theme-pink {
+            --body-bg: #fef1f5; --card-bg: #ffffff; --toolbar-bg: #feeef2; --border-color: #efcdd6;
+            --btn-bg: #fff5f8; --btn-border: #e7bcce; --btn-text: #914d6b; --primary-bg: #c96a8f;
+            --range-bg: #fce4ec; --text-primary: #5b3a48; --header-bg: #bf7b97; --header-text: white;
+            --staff-col-bg: #fef2f7; --holiday-bg: #ffe2eb; --weekend-bg: #f6cedb; --weekend-text: #b15573;
+            --national-bg: #fad9e3; --national-text: #a54367; --table-bg: #fffafc; --holiday-count-bg: #eacee0;
+            --daily-holiday-bg: #f5e0ea; --daily-holiday-text: #944d69;
+        }
+    </style>
+</head>
+<body>
+<div class="app-scaler" id="appScaler">
+    <div class="app-container">
+        <div class="theme-card">
+            <div class="toolbar-wrapper" id="toolbarWrapper">
+                <div class="toolbar">
+                    <div class="left-group">
+                        <button id="prevPeriodBtn">◀ 上週期</button>
+                        <button id="nextPeriodBtn">下週期 ▶</button>
+                        <div style="display:flex; gap:4px;"><input type="date" id="startDatePicker">～<input type="date" id="endDatePicker"><button id="applyCustomRangeBtn" class="primary">套用</button></div>
+                        <button id="resetDefaultCycleBtn">重置26日週期</button>
+                        <button id="clearAllBtn" style="background:#8b4c4c;">🗑️ 清除休假</button>
+                        <button id="applyPresetHolidayBtn" style="background:#3a6b5e;">📅 預設休假</button>
+                        <button id="transposeBtn" style="background:#5f6c8f;">🔄 行列互換</button>
+                        <div class="live-time" id="liveTimeDisplay">--:--:--</div>
+                    </div>
+                    <div class="right-group">
+                        <div class="zoom-control">
+                            <button id="zoomOutBtn">−</button><span class="zoom-value" id="zoomPercent">100%</span><button id="zoomInBtn">+</button><button id="zoomResetBtn">↺</button>
+                        </div>
+                        <div class="font-control">
+                            <span style="font-size:0.7rem;">🔤字體</span>
+                            <button id="fontDecreaseBtn">A-</button><button id="fontIncreaseBtn">A+</button><button id="fontResetBtn">重設</button>
+                        </div>
+                        <div class="size-control">
+                            <span style="font-size:0.7rem;">📏儲存格</span>
+                            <button id="cellWidthDecBtn">寬-</button><button id="cellWidthIncBtn">寬+</button>
+                            <button id="cellHeightDecBtn">高-</button><button id="cellHeightIncBtn">高+</button>
+                            <button id="cellPaddingResetBtn">重設間距</button>
+                        </div>
+                        <div class="output-group"><button id="exportPngBtn" style="background:#2d5f7a;">📸 輸出PNG</button></div>
+                        <div class="json-control">
+                            <button id="cloudSaveBtn" style="background:#3a6b8f;">☁️ 雲端存檔</button>
+                            <button id="cloudLoadBtn" style="background:#6f8f5e;">📡 讀取雲端</button>
+                            <span class="cloud-status" id="cloudStatus">就緒</span>
+                        </div>
+                        <div class="theme-selector"><button class="theme-btn" data-theme="default">🌙 暗夜</button><button class="theme-btn" data-theme="amber">☀️ 琥珀</button><button class="theme-btn" data-theme="green">🌿 森林</button><button class="theme-btn" data-theme="pink">🌸 粉櫻</button></div>
+                        <div class="date-range" id="rangeDisplay"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="title-header" id="titleHeader">
+                <div class="month-title" id="monthTitle"></div>
+                <span class="toggle-icon" id="toggleIcon">▲</span>
+            </div>
+            <div class="table-frozen-container" id="tableScrollArea">
+                <table class="schedule-table" id="scheduleTable">
+                    <thead id="tableHeader"></thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    // ---------- JSONBin.io 設定 ----------
+    const JSONBIN_BIN_ID = "67c2e8a8acd3cb34a8f8b9a2"; // 請替換成你自己的 Bin ID (若無則先建立，或使用默認唯讀示範)
+    const JSONBIN_API_KEY = "$2a$10$7rVp0QXa2X5x9eXoXxV9J.Z2VhB3L6ZkWqJ8H5tGcX6lK9fYqWgO"; // 替換為你的 API Key，此為範例需使用者自行申請
+    // 實際使用時請到 jsonbin.io 註冊並建立 bin，填入對應的 KEY 和 BIN ID。此處提供示範結構。
+    let currentBinId = JSONBIN_BIN_ID;
+    
+    // 員工與規則
+    let staffOrder = ["許文育","張吉誠","鄭宇淞","阮龍明","吳耀東","陳建宏"];
+    const STAFF_COUNT = 6;
+    const PRESET_RULES = [
+        { staffName:"許文育", weekdays:[4,0] },{ staffName:"張吉誠", weekdays:[3,4] },{ staffName:"鄭宇淞", weekdays:[5,6] },
+        { staffName:"阮龍明", weekdays:[6,0] },{ staffName:"吳耀東", weekdays:[6,1] },{ staffName:"陳建宏", weekdays:[0,1] }
+    ];
+    
+    const TAIWAN_NATIONAL = new Set(["01-01","02-28","04-04","04-05","05-01","06-19","09-17","10-10","01-27","01-28","01-29","01-30","01-31"]);
+    const HOLIDAY_NAMES = {"01-01":"元旦","02-28":"和平紀念日","04-04":"兒童節","04-05":"清明節","05-01":"勞動節","06-19":"端午節","09-17":"中秋節","10-10":"國慶日","01-27":"春節","01-28":"春節","01-29":"春節","01-30":"春節","01-31":"春節"};
+    function getHolidayName(date){ let mmdd = `${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`; return HOLIDAY_NAMES[mmdd] || "國定假日"; }
+    function isNationalHoliday(date){ let mmdd = `${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`; return TAIWAN_NATIONAL.has(mmdd); }
+    
+    let currentDateRange=[], currentDateStrs=[], holidaysMap={}, currentTheme="default";
+    let transposedMode = false;
+    let currentFontSize = 0.8;
+    let cellWidth = 80, cellHeight = 48, cellPaddingV = 6, cellPaddingH = 5;
+    let isToolbarCollapsed = false;
+    
+    function toYMD(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+    function getDefaultPeriod(){ let today=new Date(), y=today.getFullYear(), m=today.getMonth(), d=today.getDate(); let start=new Date(y,m,26); if(d<26) start=new Date(y,m-1,26); let end=new Date(start); end.setMonth(end.getMonth()+1); end.setDate(25); return {start,end}; }
+    function getStaffIndexByName(name){ return staffOrder.indexOf(name); }
+    
+    function computeSevenRestViolation(){
+        let violationFlag = new Array(STAFF_COUNT).fill(false);
+        for(let s=0; s<STAFF_COUNT; s++){
+            let consecutiveWork = 0;
+            for(let i=0; i<currentDateStrs.length; i++){
+                let dStr = currentDateStrs[i];
+                let isHoliday = (holidaysMap[dStr] && holidaysMap[dStr][s]) || false;
+                if(!isHoliday){ 
+                    consecutiveWork++;
+                    if(consecutiveWork > 6){ violationFlag[s] = true; break; }
+                } else { consecutiveWork = 0; }
+            }
+        }
+        return violationFlag;
+    }
+    function computeHolidayCounts(){ let cnt=new Array(STAFF_COUNT).fill(0); for(let ds of currentDateStrs){ let arr=holidaysMap[ds]; if(arr) for(let i=0;i<STAFF_COUNT;i++) if(arr[i]) cnt[i]++; } return cnt; }
+    
+    function applyTheme(t){ currentTheme=t; document.body.classList.remove('theme-amber','theme-green','theme-pink'); if(t==='amber') document.body.classList.add('theme-amber'); else if(t==='green') document.body.classList.add('theme-green'); else if(t==='pink') document.body.classList.add('theme-pink'); else document.body.classList.remove('theme-amber','theme-green','theme-pink'); renderTable(); }
+    function toggleHoliday(dateStr,staffIdx){ 
+        if(!holidaysMap[dateStr]) holidaysMap[dateStr]=new Array(STAFF_COUNT).fill(false);
+        holidaysMap[dateStr][staffIdx] = !holidaysMap[dateStr][staffIdx];
+        renderTable(); 
+    }
+    function clearAllHolidays(){ for(let ds of currentDateStrs){ if(!holidaysMap[ds]) holidaysMap[ds]=new Array(STAFF_COUNT).fill(false); for(let s=0;s<STAFF_COUNT;s++) holidaysMap[ds][s]=false; } renderTable(); }
+    function applyPresetRule(){ 
+        for(let i=0;i<currentDateStrs.length;i++){ 
+            let dStr=currentDateStrs[i]; if(!holidaysMap[dStr]) holidaysMap[dStr]=new Array(STAFF_COUNT).fill(false);
+            let wd=currentDateRange[i].getDay();
+            for(let s=0;s<STAFF_COUNT;s++) holidaysMap[dStr][s]=false;
+            for(let rule of PRESET_RULES){ 
+                let staffIdx = getStaffIndexByName(rule.staffName);
+                if(staffIdx!==-1 && rule.weekdays.includes(wd)) holidaysMap[dStr][staffIdx]=true;
+            }
+        } 
+        renderTable(); 
+    }
+    
+    function setDateRange(start,end,keep=false){ 
+        let range=[]; let cur=new Date(start); while(cur<=end){ range.push(new Date(cur)); cur.setDate(cur.getDate()+1); } 
+        currentDateRange=range; currentDateStrs=range.map(d=>toYMD(d));
+        if(!keep){ let nm={}; for(let ds of currentDateStrs) nm[ds]=new Array(STAFF_COUNT).fill(false); holidaysMap=nm; }
+        else{ let flt={}; for(let ds of currentDateStrs) flt[ds]=holidaysMap[ds]?[...holidaysMap[ds]]:new Array(STAFF_COUNT).fill(false); holidaysMap=flt; }
+        updateSmartMonthTitle();
+        renderTable(); document.getElementById('rangeDisplay').innerHTML=`${start.getFullYear()}/${start.getMonth()+1}/${start.getDate()} ～ ${end.getFullYear()}/${end.getMonth()+1}/${end.getDate()}`;
+        document.getElementById('startDatePicker').value=toYMD(start); document.getElementById('endDatePicker').value=toYMD(end); 
+    }
+    
+    function updateSmartMonthTitle(){
+        if(!currentDateRange.length) return;
+        const monthCount = new Map();
+        for(let date of currentDateRange){
+            const key = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;
+            monthCount.set(key, (monthCount.get(key)||0) + 1);
+        }
+        let maxMonth = null, maxDays = 0;
+        for(let [monthKey, days] of monthCount.entries()){
+            if(days > maxDays){ maxDays = days; maxMonth = monthKey; }
+        }
+        if(maxMonth){
+            const [year, month] = maxMonth.split('-');
+            document.getElementById('monthTitle').innerText = `${year} 年 ${parseInt(month)} 月份`;
+        } else { document.getElementById('monthTitle').innerText = ""; }
+    }
+    
+    function toggleToolbar(){
+        const wrapper = document.getElementById('toolbarWrapper');
+        const icon = document.getElementById('toggleIcon');
+        isToolbarCollapsed = !isToolbarCollapsed;
+        if(isToolbarCollapsed){
+            wrapper.classList.add('collapsed');
+            icon.classList.add('collapsed');
+            icon.innerText = '▼';
+        } else {
+            wrapper.classList.remove('collapsed');
+            icon.classList.remove('collapsed');
+            icon.innerText = '▲';
+        }
+        setTimeout(() => smartScaleFit(), 50);
+    }
+    
+    function applyCellDimensions(){
+        document.documentElement.style.setProperty('--cell-width', `${cellWidth}px`);
+        document.documentElement.style.setProperty('--cell-height', cellHeight === 0 ? 'auto' : `${cellHeight}px`);
+        document.documentElement.style.setProperty('--cell-padding', `${cellPaddingV}px ${cellPaddingH}px`);
+        renderTable();
+    }
+    function setCellWidth(delta){ let newWidth = cellWidth + delta; if(newWidth >= 45 && newWidth <= 250) cellWidth = newWidth; applyCellDimensions(); }
+    function setCellHeight(delta){ let newHeight = cellHeight + delta; if(newHeight >= 30 && newHeight <= 120) cellHeight = newHeight; applyCellDimensions(); }
+    function resetCellPadding(){ cellPaddingV = 6; cellPaddingH = 5; applyCellDimensions(); }
+    
+    function resetDefaultCycle(){ let {start,end}=getDefaultPeriod(); setDateRange(start,end,false); }
+    function applyCustomRange(){ let s=new Date(document.getElementById('startDatePicker').value), e=new Date(document.getElementById('endDatePicker').value); if(isNaN(s)||isNaN(e)){alert('請填寫有效日期');return;} if(s>e){alert('起始日不能晚於結束日');return;} setDateRange(s,e,false); }
+    function prevPeriod(){
+        if(!currentDateRange.length) return;
+        let firstDate = new Date(currentDateRange[0]);
+        let prevStart = new Date(firstDate); prevStart.setDate(prevStart.getDate() - 1);
+        let year = prevStart.getFullYear(), month = prevStart.getMonth();
+        let targetStart = new Date(year, month, 26);
+        if(prevStart.getDate() < 26) targetStart = new Date(year, month-1, 26);
+        let targetEnd = new Date(targetStart); targetEnd.setMonth(targetEnd.getMonth()+1); targetEnd.setDate(25);
+        setDateRange(targetStart, targetEnd, true);
+    }
+    function nextPeriod(){
+        if(!currentDateRange.length) return;
+        let lastDate = new Date(currentDateRange[currentDateRange.length-1]);
+        let nextStart = new Date(lastDate); nextStart.setDate(nextStart.getDate() + 1);
+        let year = nextStart.getFullYear(), month = nextStart.getMonth();
+        let targetStart = new Date(year, month, 26);
+        if(nextStart.getDate() < 26) targetStart = new Date(year, month-1, 26);
+        let targetEnd = new Date(targetStart); targetEnd.setMonth(targetEnd.getMonth()+1); targetEnd.setDate(25);
+        setDateRange(targetStart, targetEnd, true);
+    }
+    
+    function getSpecialMarkAndStatusText(staffName, isHolidayChecked){
+        if(staffName === "許文育" && !isHolidayChecked) return { mark:"M", statusText:null };
+        if(staffName === "張吉誠" && !isHolidayChecked) return { mark:"N", statusText:null };
+        if((staffName === "阮龍明" || staffName === "吳耀東" || staffName === "陳建宏") && !isHolidayChecked) return { mark:"E", statusText:null };
+        if(staffName === "鄭宇淞") {
+            if(isHolidayChecked) return { mark:null, statusText:"休" };
+            else return { mark:"M", statusText:null };
+        }
+        return { mark:null, statusText: isHolidayChecked ? "休" : null };
+    }
+    
+    function transposeTable(){ transposedMode = !transposedMode; renderTable(); }
+    function setTableFontSize(sizeRem){ currentFontSize = Math.min(1.2, Math.max(0.6, sizeRem)); document.documentElement.style.setProperty('--table-font-size', `${currentFontSize}rem`); renderTable(); }
+    function increaseFont(){ setTableFontSize(currentFontSize + 0.05); }
+    function decreaseFont(){ setTableFontSize(currentFontSize - 0.05); }
+    function resetFont(){ setTableFontSize(0.8); }
+    function updateLiveTime() { const now=new Date(); document.getElementById('liveTimeDisplay').innerText=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`; }
+    
+    // ----- JSONBin.io 雲端存檔功能 -----
+    async function cloudSave() {
+        const statusSpan = document.getElementById('cloudStatus');
+        statusSpan.innerText = '上傳中...';
+        const exportData = {
+            version: "jsonbin_1.0",
+            dateRangeStrs: currentDateStrs,
+            holidaysMap: holidaysMap,
+            theme: currentTheme,
+            staffOrder: staffOrder,
+            transposedMode: transposedMode,
+            fontSize: currentFontSize,
+            cellWidth, cellHeight, cellPaddingH, cellPaddingV,
+            toolbarCollapsed: isToolbarCollapsed
+        };
+        try {
+            // 若無 binId 則先建立，此處假設已存在有效 binId，使用者需自行申請
+            const response = await fetch(`https://api.jsonbin.io/v3/b/${currentBinId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Master-Key': JSONBIN_API_KEY
+                },
+                body: JSON.stringify(exportData)
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            statusSpan.innerText = '已儲存雲端';
+            setTimeout(()=>{ statusSpan.innerText = '就緒'; }, 2000);
+            alert('成功儲存至 JSONBin.io');
+        } catch(e) {
+            statusSpan.innerText = '上傳失敗';
+            console.error(e);
+            alert('雲端儲存失敗，請確認 Bin ID 與 API Key 正確設置。\n可至 jsonbin.io 註冊並建立 Bin。');
+        }
+    }
+    
+    async function cloudLoad() {
+        const statusSpan = document.getElementById('cloudStatus');
+        statusSpan.innerText = '讀取中...';
+        try {
+            const response = await fetch(`https://api.jsonbin.io/v3/b/${currentBinId}/latest`, {
+                headers: { 'X-Master-Key': JSONBIN_API_KEY }
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const result = await response.json();
+            const saved = result.record;
+            if(saved && saved.dateRangeStrs && saved.dateRangeStrs.length && saved.holidaysMap) {
+                let startDate = new Date(saved.dateRangeStrs[0]), endDate = new Date(saved.dateRangeStrs[saved.dateRangeStrs.length-1]);
+                if(isNaN(startDate)||isNaN(endDate)) throw new Error("日期無效");
+                let range=[]; let cur=new Date(startDate); while(cur<=endDate){ range.push(new Date(cur)); cur.setDate(cur.getDate()+1); }
+                currentDateRange=range; currentDateStrs=range.map(d=>toYMD(d));
+                let restored={};
+                for(let ds of currentDateStrs) restored[ds]=(saved.holidaysMap[ds] && saved.holidaysMap[ds].length===STAFF_COUNT)?[...saved.holidaysMap[ds]]:new Array(STAFF_COUNT).fill(false);
+                holidaysMap=restored;
+                if(saved.staffOrder && saved.staffOrder.length===STAFF_COUNT) staffOrder=saved.staffOrder;
+                if(saved.theme) applyTheme(saved.theme);
+                transposedMode = saved.transposedMode || false;
+                if(saved.fontSize) setTableFontSize(saved.fontSize); else resetFont();
+                if(saved.cellWidth) cellWidth = saved.cellWidth; if(saved.cellHeight) cellHeight = saved.cellHeight;
+                if(saved.cellPaddingH) cellPaddingH = saved.cellPaddingH; if(saved.cellPaddingV) cellPaddingV = saved.cellPaddingV;
+                if(saved.toolbarCollapsed !== undefined) isToolbarCollapsed = saved.toolbarCollapsed;
+                applyCellDimensions();
+                updateSmartMonthTitle();
+                renderTable();
+                const wrapper = document.getElementById('toolbarWrapper'); const icon = document.getElementById('toggleIcon');
+                if(isToolbarCollapsed){ wrapper.classList.add('collapsed'); icon.classList.add('collapsed'); icon.innerText = '▼'; }
+                else { wrapper.classList.remove('collapsed'); icon.classList.remove('collapsed'); icon.innerText = '▲'; }
+                statusSpan.innerText = '載入成功';
+                setTimeout(()=>{ statusSpan.innerText = '就緒'; }, 2000);
+                alert('雲端資料已載入');
+            } else throw new Error("無效資料格式");
+        } catch(e) {
+            statusSpan.innerText = '載入失敗';
+            console.error(e);
+            alert('讀取雲端失敗，請檢查 Bin ID / API Key 或網路狀態');
+        }
+    }
+    
+    // 渲染表格 (點擊儲存格切換休假，無勾選框，完全垂直水平置中)
+    function renderTable(){
+        const thead=document.getElementById('tableHeader'), tbody=document.getElementById('tableBody');
+        if(!thead||!tbody) return;
+        let violationFlags = computeSevenRestViolation();
+        let holidayCounts = computeHolidayCounts();
+        if(!transposedMode){
+            let headerRow = document.createElement('tr');
+            let thCorner = document.createElement('th'); thCorner.innerText = "姓名/日期"; thCorner.style.minWidth = "90px";
+            headerRow.appendChild(thCorner);
+            for(let idx=0; idx<currentDateStrs.length; idx++){ 
+                let d = currentDateRange[idx]; 
+                let th = document.createElement('th'); 
+                th.innerHTML = `${d.getDate()}<br><span style="font-size:0.7rem;">(${['日','一','二','三','四','五','六'][d.getDay()]})</span>`; 
+                headerRow.appendChild(th); 
+            }
+            thead.innerHTML = ''; thead.appendChild(headerRow);
+            tbody.innerHTML = '';
+            for(let s=0; s<STAFF_COUNT; s++){
+                let staffName = staffOrder[s];
+                let tr = document.createElement('tr');
+                let tdStaff = document.createElement('td');
+                let vertDiv = document.createElement('div'); vertDiv.className = 'staff-vertical';
+                let nameSpan = document.createElement('span'); nameSpan.className = 'staff-name';
+                nameSpan.innerText = staffName;
+                if(violationFlags[s]) nameSpan.classList.add('violation-blink');
+                let countSpan = document.createElement('span'); countSpan.className = 'holiday-count-badge'; countSpan.innerText = `休${holidayCounts[s]}天`;
+                vertDiv.appendChild(nameSpan); vertDiv.appendChild(countSpan);
+                tdStaff.appendChild(vertDiv); tr.appendChild(tdStaff);
+                for(let dIdx=0; dIdx<currentDateStrs.length; dIdx++){ 
+                    let dStr = currentDateStrs[dIdx], dateObj = currentDateRange[dIdx];
+                    let isHoliday = (holidaysMap[dStr] && holidaysMap[dStr][s]) || false;
+                    let td = document.createElement('td');
+                    td.classList.add('clickable-cell');
+                    if(dateObj.getDay()===6 || dateObj.getDay()===0) td.classList.add('weekend-cell');
+                    let isNational = isNationalHoliday(dateObj);
+                    if(isNational){ td.classList.add('national-cell', 'holiday-tooltip'); td.setAttribute('data-holiday-name', getHolidayName(dateObj)); }
+                    if(isHoliday) td.classList.add('holiday-mark');
+                    let { mark, statusText } = getSpecialMarkAndStatusText(staffName, isHoliday);
+                    let contentSpan = document.createElement('span');
+                    contentSpan.style.display = 'inline-flex';
+                    contentSpan.style.alignItems = 'center';
+                    contentSpan.style.justifyContent = 'center';
+                    if(statusText){
+                        contentSpan.innerText = statusText;
+                        contentSpan.style.fontWeight = 'bold';
+                        contentSpan.style.backgroundColor = 'var(--holiday-bg)';
+                        contentSpan.style.padding = '2px 8px';
+                        contentSpan.style.borderRadius = '24px';
+                    } else if(isHoliday && !statusText){
+                        contentSpan.innerText = '休';
+                        contentSpan.style.fontWeight = 'bold';
+                        contentSpan.style.backgroundColor = 'var(--holiday-bg)';
+                        contentSpan.style.padding = '2px 8px';
+                        contentSpan.style.borderRadius = '24px';
+                    } else {
+                        contentSpan.innerText = '';
+                    }
+                    if(mark){
+                        let markSpan = document.createElement('span'); markSpan.className = 'special-mark'; markSpan.innerText = mark;
+                        contentSpan.appendChild(markSpan);
+                    }
+                    td.appendChild(contentSpan);
+                    td.addEventListener('click', ((date, idxStaff) => (e) => {
+                        e.stopPropagation();
+                        toggleHoliday(date, idxStaff);
+                    })(dStr, s));
+                    tr.appendChild(td);
+                }
+                tbody.appendChild(tr);
+            }
+            let totalRow = document.createElement('tr'); 
+            let tdLabel = document.createElement('td'); tdLabel.innerText='每日休假人數'; tdLabel.style.fontWeight='bold'; totalRow.appendChild(tdLabel);
+            for(let i=0;i<currentDateStrs.length;i++){ 
+                let ds=currentDateStrs[i]; let arr=holidaysMap[ds]||new Array(STAFF_COUNT).fill(false); let cnt=arr.filter(v=>v===true).length; 
+                let tdCnt=document.createElement('td'); tdCnt.innerText=cnt; tdCnt.classList.add('daily-holiday-cell'); totalRow.appendChild(tdCnt); 
+            }
+            tbody.appendChild(totalRow);
+        } else {
+            // 轉置模式
+            thead.innerHTML = ''; tbody.innerHTML = '';
+            let headerRow = document.createElement('tr');
+            let thCorner = document.createElement('th'); thCorner.innerText = "日期\\員工";
+            headerRow.appendChild(thCorner);
+            for(let s=0; s<STAFF_COUNT; s++){ let th = document.createElement('th'); th.innerText = staffOrder[s]; headerRow.appendChild(th); }
+            thead.appendChild(headerRow);
+            for(let dIdx=0; dIdx<currentDateStrs.length; dIdx++){
+                let dateObj = currentDateRange[dIdx];
+                let tr = document.createElement('tr');
+                let tdDate = document.createElement('td'); tdDate.innerText = `${dateObj.getMonth()+1}/${dateObj.getDate()} (${['日','一','二','三','四','五','六'][dateObj.getDay()]})`;
+                if(dateObj.getDay()===6||dateObj.getDay()===0) tdDate.classList.add('weekend-cell');
+                if(isNationalHoliday(dateObj)){ tdDate.classList.add('national-cell','holiday-tooltip'); tdDate.setAttribute('data-holiday-name', getHolidayName(dateObj)); }
+                tr.appendChild(tdDate);
+                for(let s=0; s<STAFF_COUNT; s++){
+                    let isHoliday = (holidaysMap[currentDateStrs[dIdx]] && holidaysMap[currentDateStrs[dIdx]][s]) || false;
+                    let td = document.createElement('td');
+                    td.classList.add('clickable-cell');
+                    let staffName = staffOrder[s];
+                    let { mark, statusText } = getSpecialMarkAndStatusText(staffName, isHoliday);
+                    let contentSpan = document.createElement('span');
+                    contentSpan.style.display = 'inline-flex';
+                    contentSpan.style.alignItems = 'center';
+                    contentSpan.style.justifyContent = 'center';
+                    if(statusText){
+                        contentSpan.innerText = statusText;
+                        contentSpan.style.fontWeight = 'bold';
+                        contentSpan.style.backgroundColor = 'var(--holiday-bg)';
+                        contentSpan.style.padding = '2px 8px';
+                        contentSpan.style.borderRadius = '24px';
+                    } else if(isHoliday && !statusText){
+                        contentSpan.innerText = '休';
+                        contentSpan.style.fontWeight = 'bold';
+                        contentSpan.style.backgroundColor = 'var(--holiday-bg)';
+                        contentSpan.style.padding = '2px 8px';
+                        contentSpan.style.borderRadius = '24px';
+                    }
+                    if(mark){
+                        let markSpan = document.createElement('span'); markSpan.className = 'special-mark'; markSpan.innerText = mark;
+                        contentSpan.appendChild(markSpan);
+                    }
+                    td.appendChild(contentSpan);
+                    td.addEventListener('click', ((dateStr, staffIdx) => (e) => {
+                        e.stopPropagation();
+                        toggleHoliday(dateStr, staffIdx);
+                    })(currentDateStrs[dIdx], s));
+                    tr.appendChild(td);
+                }
+                tbody.appendChild(tr);
+            }
+        }
+        document.querySelectorAll('.schedule-table td, .schedule-table th').forEach(cell => {
+            cell.style.width = `${cellWidth}px`;
+            if(cellHeight > 0) cell.style.height = `${cellHeight}px`;
+        });
+    }
+    
+    let currentZoomScale=1;
+    function smartScaleFit(){ const scaler=document.getElementById('appScaler'); const container=document.querySelector('.app-container'); if(!container||!scaler) return; const viewW=window.innerWidth, viewH=window.innerHeight; const rect=container.getBoundingClientRect(); let scale = Math.min(viewW/rect.width, viewH/rect.height, 1.5); if(scale>1) scale=Math.min(scale,1.2); if(scale<0.6) scale=0.6; scaler.style.transform=`scale(${scale})`; document.getElementById('zoomPercent').innerText = `${Math.round(scale*100)}%`; currentZoomScale=scale;}
+    function setZoom(scale){ currentZoomScale=Math.min(1.5,Math.max(0.55,scale)); document.getElementById('appScaler').style.transform=`scale(${currentZoomScale})`; document.getElementById('zoomPercent').innerText=`${Math.round(currentZoomScale*100)}%`; }
+    function zoomIn(){ setZoom(currentZoomScale+0.1); } function zoomOut(){ setZoom(currentZoomScale-0.1); } function zoomReset(){ smartScaleFit(); }
+    async function exportPNG(){ const element=document.querySelector('.theme-card'); if(!element) return; const oldTransform=element.style.transform; element.style.transform='scale(1)'; try{ const canvas=await html2canvas(element,{scale:2.2}); const link=document.createElement('a'); link.download=`排班表.png`; link.href=canvas.toDataURL(); link.click(); }catch(e){ alert('匯出失敗'); } finally{ element.style.transform=oldTransform; } }
+    
+    function init(){
+        let {start,end}=getDefaultPeriod(); setDateRange(start,end,false); applyPresetRule(); applyTheme('default'); resetFont(); applyCellDimensions(); smartScaleFit();
+        updateLiveTime(); setInterval(updateLiveTime, 1000);
+        isToolbarCollapsed = false;
+        const wrapper = document.getElementById('toolbarWrapper'); const icon = document.getElementById('toggleIcon');
+        wrapper.classList.remove('collapsed'); icon.classList.remove('collapsed'); icon.innerText = '▲';
+    }
+    
+    document.getElementById('prevPeriodBtn').onclick=prevPeriod; document.getElementById('nextPeriodBtn').onclick=nextPeriod;
+    document.getElementById('resetDefaultCycleBtn').onclick=resetDefaultCycle; document.getElementById('applyCustomRangeBtn').onclick=applyCustomRange;
+    document.getElementById('clearAllBtn').onclick=clearAllHolidays; document.getElementById('applyPresetHolidayBtn').onclick=()=>{ if(confirm('重新套用預設休假規則？')) applyPresetRule(); };
+    document.getElementById('zoomInBtn').onclick=zoomIn; document.getElementById('zoomOutBtn').onclick=zoomOut; document.getElementById('zoomResetBtn').onclick=zoomReset;
+    document.getElementById('fontIncreaseBtn').onclick=increaseFont; document.getElementById('fontDecreaseBtn').onclick=decreaseFont; document.getElementById('fontResetBtn').onclick=resetFont;
+    document.getElementById('cellWidthIncBtn').onclick=()=>setCellWidth(5); document.getElementById('cellWidthDecBtn').onclick=()=>setCellWidth(-5);
+    document.getElementById('cellHeightIncBtn').onclick=()=>setCellHeight(4); document.getElementById('cellHeightDecBtn').onclick=()=>setCellHeight(-4);
+    document.getElementById('cellPaddingResetBtn').onclick=resetCellPadding;
+    document.getElementById('exportPngBtn').onclick=exportPNG;
+    document.getElementById('cloudSaveBtn').onclick=cloudSave; document.getElementById('cloudLoadBtn').onclick=cloudLoad;
+    document.querySelectorAll('.theme-btn').forEach(btn=>btn.addEventListener('click',()=>applyTheme(btn.getAttribute('data-theme'))));
+    document.getElementById('transposeBtn').onclick=transposeTable;
+    document.getElementById('titleHeader').addEventListener('click', toggleToolbar);
+    window.addEventListener('resize',smartScaleFit);
+    init();
+</script>
+</body>
+</html>
